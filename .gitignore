@@ -1,0 +1,23 @@
+# .gitignore — RustDesk Server OSS
+
+# Never commit the live environment file (contains server IP and credentials)
+.env
+
+# Never commit RustDesk key material or the SQLite registration database
+data/
+*.db
+id_ed25519
+id_ed25519.pub
+
+# Editor metadata
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log

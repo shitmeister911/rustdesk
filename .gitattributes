@@ -1,0 +1,13 @@
+# Force LF line endings for all shell scripts and text files.
+# This ensures scripts work correctly on Linux regardless of where the repo is edited.
+
+* text=auto
+
+*.sh        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.env       text eol=lf
+*.example   text eol=lf
+Makefile    text eol=lf

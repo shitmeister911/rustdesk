@@ -1,0 +1,48 @@
+# docker/compose.yml — RustDesk Server OSS reference compose file
+#
+# This is the template in the repo. The install script writes a runtime copy
+# with substituted values to /opt/rustdesk/compose.yml.
+#
+# To use this template directly:
+#   cp docker/compose.yml /opt/rustdesk/compose.yml
+#   cp .env.example /opt/rustdesk/.env  && edit it
+#   docker compose -f /opt/rustdesk/compose.yml up -d
+
+services:
+
+  hbbs:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rustdesk-hbbs
+    # -r: tells clients the address to reach the relay server (hbbr)
+    # Must be the server's public IP or FQDN — not 127.0.0.1
+    command: hbbs -r ${SERVER_IP}
+    # host networking: required for UDP 21116 hole-punching to preserve source ports.
+    # Docker bridge NAT breaks the port mapping and prevents direct peer connections.
+    network_mode: host
+    volumes:
+      # Both hbbs and hbbr mount the same path.
+      # hbbs writes id_ed25519 + id_ed25519.pub here on first start.
+      # hbbr reads the same private key to authenticate relay sessions.
+      - ${RUSTDESK_DATA_DIR:-/opt/rustdesk/data}:/root
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        # Docker's json-file driver handles rotation natively.
+        # No logrotate.d entry needed for container logs.
+        max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-3}"
+
+  hbbr:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rustdesk-hbbr
+    command: hbbr
+    network_mode: host
+    volumes:
+      - ${RUSTDESK_DATA_DIR:-/opt/rustdesk/data}:/root
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-3}"

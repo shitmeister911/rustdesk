@@ -1,0 +1,45 @@
+# Windows SSH config — connect to your RustDesk server with: ssh rustdesk
+#
+# File location: C:\Users\<YourUsername>\.ssh\config
+#
+# How to use:
+#   1. Open Notepad (or any text editor)
+#   2. Paste this content, replace the values in < > brackets
+#   3. Save to: C:\Users\<YourUsername>\.ssh\config
+#   4. Open PowerShell or Windows Terminal
+#   5. Type: ssh rustdesk
+#
+# Prerequisites:
+#   - Windows 10 1809+ or Windows 11 (built-in OpenSSH client)
+#   - Your SSH private key at: C:\Users\<YourUsername>\.ssh\id_ed25519
+#   - Your public key added to the server's authorized_keys
+#
+# To generate an SSH key pair on Windows (run in PowerShell):
+#   ssh-keygen -t ed25519 -C "your@email.com"
+#
+# To copy your public key to the server (run in PowerShell):
+#   type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh -p 2222 rdadmin@203.0.113.10 "cat >> ~/.ssh/authorized_keys"
+# ---------------------------------------------------------------------------
+
+Host rustdesk
+  HostName 203.0.113.10
+  User rdadmin
+  Port 2222
+  IdentityFile ~/.ssh/id_ed25519
+  ServerAliveInterval 60
+  ServerAliveCountMax 3
+
+# ---------------------------------------------------------------------------
+# Replace these values with your actual settings:
+#   HostName   — your server's public IP address or domain name
+#   User       — the ADMIN_USER you set in .env (default: rdadmin)
+#   Port       — the SSH_PORT you set in .env (default: 2222)
+#
+# After editing, test with:
+#   ssh rustdesk
+#
+# Common issues:
+#   Permission denied — your public key is not in the server's authorized_keys
+#   Connection refused — check SSH_PORT and cloud firewall settings
+#   Host key changed  — run: ssh-keygen -R [203.0.113.10]:2222
+# ---------------------------------------------------------------------------
