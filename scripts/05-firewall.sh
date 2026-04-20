@@ -16,17 +16,29 @@ step_05_firewall() {
     SSH_PORT="${SSH_PORT:-2222}"
 
     # ── Reset to clean state ──────────────────────────────────────────────────
-    # --force suppresses the interactive prompt
     info "Resetting UFW to a clean state..."
     ufw --force reset > /dev/null 2>&1
     add_status "Firewall" "UFW reset" PASS "clean state"
 
     # ── SSH — MUST be first ───────────────────────────────────────────────────
-    # Adding the SSH rule before 'ufw enable' guarantees you keep access.
-    # If UFW enabled with no SSH rule, all remote sessions are cut immediately.
-    ufw allow "${SSH_PORT}/tcp" comment "SSH admin access"
-    ok "Rule added: ${SSH_PORT}/tcp — SSH admin access"
-    add_status "Firewall" "SSH ${SSH_PORT}/tcp" PASS "admin access"
+    # Detect the port sshd is actually listening on right now.
+    # On a fresh install this is 22. After 04-ssh-hardening.sh it becomes SSH_PORT.
+    # We allow BOTH so the machine stays reachable whether hardening ran or not.
+    ACTUAL_SSH_PORT="$(ss -tlnp 2>/dev/null | awk '/sshd/{print $4}' \
+        | grep -oP '(?<=:)\d+' | head -1 || echo 22)"
+    ACTUAL_SSH_PORT="${ACTUAL_SSH_PORT:-22}"
+
+    # Allow the current live port first — locks in existing access
+    ufw allow "${ACTUAL_SSH_PORT}/tcp" comment "SSH current port — active sshd"
+    ok "Rule added: ${ACTUAL_SSH_PORT}/tcp — SSH current port"
+    add_status "Firewall" "SSH ${ACTUAL_SSH_PORT}/tcp (current)" PASS "active sshd port"
+
+    # Allow the configured target port too (may differ before hardening runs)
+    if [[ "$SSH_PORT" != "$ACTUAL_SSH_PORT" ]]; then
+        ufw allow "${SSH_PORT}/tcp" comment "SSH target port — after hardening"
+        ok "Rule added: ${SSH_PORT}/tcp — SSH target port (post-hardening)"
+        add_status "Firewall" "SSH ${SSH_PORT}/tcp (target)" PASS "post-hardening port"
+    fi
 
     # ── RustDesk hbbs (ID / rendezvous server) ────────────────────────────────
 

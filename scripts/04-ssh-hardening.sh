@@ -22,12 +22,15 @@ step_04_ssh_hardening() {
 
     # ── Safety gate ───────────────────────────────────────────────────────────
     # Disabling password auth on an empty authorized_keys causes permanent lockout.
+    # When no key is present we skip hardening entirely and leave passwords enabled
+    # so the machine stays accessible. Re-run this script after adding a key.
     if [[ ! -s "$AUTH_KEYS" ]]; then
-        fail "authorized_keys for '$ADMIN_USER' is empty."
-        fail "Add your SSH public key first:"
-        fail "  ssh-copy-id -p ${SSH_PORT} -i ~/.ssh/id_ed25519.pub ${ADMIN_USER}@${SERVER_IP:-<SERVER_IP>}"
-        add_status "SSH" "Safety gate" FAIL "authorized_keys empty — hardening skipped"
-        die "SSH hardening aborted to prevent lockout."
+        warn "authorized_keys for '$ADMIN_USER' is empty — SSH hardening SKIPPED."
+        warn "SSH is still accessible with password on its default port."
+        warn "Add your key then re-run:  sudo bash scripts/04-ssh-hardening.sh"
+        warn "  ssh-copy-id -p 22 -i ~/.ssh/id_ed25519.pub ${ADMIN_USER}@${SERVER_IP:-<SERVER_IP>}"
+        add_status "SSH" "Hardening" WARN "skipped — no key in authorized_keys (passwords still active)"
+        return 0
     fi
     ok "authorized_keys has content — safe to disable password auth."
     add_status "SSH" "Safety gate" PASS "key(s) present"
@@ -124,6 +127,16 @@ EOF
         fail "SSH daemon failed to start."
         add_status "SSH" "Service restart" FAIL "not running"
         die "SSH not active — check: journalctl -u ssh -n 20"
+    fi
+
+    # ── Remove port-22 fallback UFW rule now that SSH has moved ──────────────────
+    # 05-firewall.sh opened port 22 as a safety fallback in case hardening was
+    # skipped. Since hardening succeeded and SSH moved to ${SSH_PORT}, close 22
+    # (unless the target port IS 22, which would be unusual but valid).
+    if [[ "$SSH_PORT" != "22" ]] && command -v ufw &>/dev/null; then
+        ufw delete allow 22/tcp 2>/dev/null && \
+            ok "Removed temporary UFW rule for port 22 (SSH now on ${SSH_PORT})." || true
+        add_status "Firewall" "Port 22 fallback" PASS "rule removed — SSH on ${SSH_PORT}"
     fi
 
     warn "IMPORTANT: Test login in a NEW terminal BEFORE closing this session."

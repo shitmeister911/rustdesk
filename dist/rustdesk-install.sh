@@ -282,9 +282,12 @@ step_04_ssh_hardening() {
     DROP_IN="${DROP_IN_DIR}/99-hardened.conf"
 
     if [[ ! -s "$AUTH_KEYS" ]]; then
-        fail "authorized_keys is empty. Add your public key first."
-        add_status "SSH" "Safety gate" FAIL "authorized_keys empty"
-        die "SSH hardening aborted to prevent lockout."
+        warn "authorized_keys is empty — SSH hardening SKIPPED."
+        warn "SSH is still accessible with password on its default port."
+        warn "Add your key then re-run step 4:  sudo bash scripts/04-ssh-hardening.sh"
+        warn "  ssh-copy-id -p 22 -i ~/.ssh/id_ed25519.pub ${ADMIN_USER}@${SERVER_IP:-<IP>}"
+        add_status "SSH" "Hardening" WARN "skipped — no key (passwords still active)"
+        return 0
     fi
     ok "authorized_keys has content — safe to proceed."
     add_status "SSH" "Safety gate" PASS "key present"
@@ -344,6 +347,13 @@ EOF
         die "SSH not active — check: journalctl -u ssh -n 20"
     fi
 
+    # Once hardening succeeds and SSH moves, remove the port-22 fallback UFW rule
+    if [[ "$SSH_PORT" != "22" ]] && command -v ufw &>/dev/null; then
+        ufw delete allow 22/tcp 2>/dev/null && \
+            ok "Removed temporary UFW rule for port 22 (SSH now on ${SSH_PORT})." || true
+        add_status "Firewall" "Port 22 fallback" PASS "rule removed"
+    fi
+
     warn "Test login in a NEW terminal before closing this session."
     warn "  ssh -p ${SSH_PORT} ${ADMIN_USER}@${SERVER_IP:-<IP>}"
 }
@@ -360,10 +370,22 @@ step_05_firewall() {
     ufw --force reset > /dev/null 2>&1
     add_status "Firewall" "UFW reset" PASS "clean state"
 
-    # SSH first — prevents lockout when UFW is enabled below
-    ufw allow "${SSH_PORT}/tcp" comment "SSH admin access"
-    ok "Rule: ${SSH_PORT}/tcp — SSH admin access"
-    add_status "Firewall" "SSH ${SSH_PORT}/tcp" PASS "admin access"
+    # Detect the port sshd is actually listening on right now (22 on fresh installs).
+    # Allow both the current live port AND the configured target port so the machine
+    # stays reachable whether or not SSH hardening has run yet.
+    ACTUAL_SSH_PORT="$(ss -tlnp 2>/dev/null | awk '/sshd/{print $4}' \
+        | grep -oP '(?<=:)\d+' | head -1 || echo 22)"
+    ACTUAL_SSH_PORT="${ACTUAL_SSH_PORT:-22}"
+
+    ufw allow "${ACTUAL_SSH_PORT}/tcp" comment "SSH current port — active sshd"
+    ok "Rule: ${ACTUAL_SSH_PORT}/tcp — SSH current port"
+    add_status "Firewall" "SSH ${ACTUAL_SSH_PORT}/tcp (current)" PASS "active sshd port"
+
+    if [[ "$SSH_PORT" != "$ACTUAL_SSH_PORT" ]]; then
+        ufw allow "${SSH_PORT}/tcp" comment "SSH target port — after hardening"
+        ok "Rule: ${SSH_PORT}/tcp — SSH target port (post-hardening)"
+        add_status "Firewall" "SSH ${SSH_PORT}/tcp (target)" PASS "post-hardening port"
+    fi
 
     # RustDesk hbbs
     ufw allow 21115/tcp comment "RustDesk hbbs — NAT type test"
